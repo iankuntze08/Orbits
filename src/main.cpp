@@ -152,6 +152,11 @@ class UniformHandler
         std::vector<unvec2> vec2List;
         unwindow window;
 
+        unmat4 viewMatrix;
+        unmat4 projMatrix;
+        unmat4 modelMatrix;
+        unmat4 translationMatrix;
+
         UniformHandler(const Shader& shaderProgram) : shader(shaderProgram)
         {
         }
@@ -170,6 +175,13 @@ class UniformHandler
                 throw std::invalid_argument("Invalid uniform name");
             mat4List.push_back(unmat4{x, uniformLoc});
         }
+        GLint getUniformLoc(const char* name)
+        {
+            GLint uniformLoc = glGetUniformLocation(shader.ID, name);
+            if (uniformLoc == -1)
+                throw std::invalid_argument("Invalid uniform name");
+            return uniformLoc;
+        }
         void addvec2(const glm::vec2& x, const char* name)
         {
             GLint uniformLoc = glGetUniformLocation(shader.ID, name);
@@ -184,8 +196,21 @@ class UniformHandler
                 throw std::invalid_argument("Invalid uniform name");
             this->window.sizeLoc = uniformLoc;
         }
+        void add3DMatrices(glm::mat4& view, glm::mat4& proj, glm::mat4& model)
+        {
+            viewMatrix = {view, getUniformLoc("view")};
+            projMatrix = {proj, getUniformLoc("proj")};
+            modelMatrix = {model, getUniformLoc("model")};
+        }
 
 
+
+        void update3DMatrices(glm::mat4& view, glm::mat4& proj, glm::mat4& model)
+        {
+            viewMatrix.value = view;
+            projMatrix.value = proj;
+            modelMatrix.value = model;
+        }
         void updateWindowSize(GLFWwindow* window)
         {
             int width, height;
@@ -202,6 +227,10 @@ class UniformHandler
                 glUniform1f(x.loc, x.value);
             for (unvec2 x : vec2List)
                 glUniform2f(x.loc, x.value.x, x.value.y);
+
+            glUniformMatrix4fv(viewMatrix.loc, 1, GL_FALSE, glm::value_ptr(viewMatrix.value));
+            glUniformMatrix4fv(projMatrix.loc, 1, GL_FALSE, glm::value_ptr(projMatrix.value));
+            glUniformMatrix4fv(modelMatrix.loc, 1, GL_FALSE, glm::value_ptr(modelMatrix.value));
         }
 
     private:
@@ -700,9 +729,7 @@ int main(int argc, char** argv)
     proj = glm::perspective(glm::radians(70.0f), 800.0f / 600.0f, 0.1f, 100.0f);
     view = glm::translate(view, glm::vec3(0.0f, 0.0f, 0.0f));
 
-    uniformer.addmat4(model, "model");
-    uniformer.addmat4(proj, "view");
-    uniformer.addmat4(view, "proj");
+    uniformer.add3DMatrices(view, proj, model);
 
     glm::vec2 windowSize = glm::vec2(SCR_WIDTH, SCR_HEIGHT);
     // RandomNumberGenerator rng = RandomNumberGenerator();
@@ -732,7 +759,7 @@ int main(int argc, char** argv)
         fpsCounter.frames += 1;
         fpsCounter.fpsCheck();
 
-        glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         mainShader.use();
@@ -763,6 +790,7 @@ int main(int argc, char** argv)
         // );
         uniformer.updateUniforms();
         uniformer.updateWindowSize(window);
+        uniformer.update3DMatrices(view, proj, model);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
