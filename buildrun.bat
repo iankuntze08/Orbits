@@ -4,4 +4,4 @@ if /I "%dec%"=="y" (del build)
 
 cmake . -B build
 cmake --build build
-.\build\Debug\GLVSCode.exe
+.\build\Debug\GLVSCode.exe %*

@@ -8,6 +8,7 @@
 #include <gtx/perpendicular.hpp>
 
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <algorithm>
 #include <random>
@@ -40,7 +41,7 @@ float lastX = SCR_WIDTH / 2;
 float lastY = SCR_HEIGHT / 2;
 Camera3D camera = Camera3D(glm::vec3(0.0f, 0.0f, 3.0f), 0.005f);
 
-float dt = 0.03;
+float dt = 0.5;
 
 struct Body
 {
@@ -703,19 +704,12 @@ void rk4(Body& b0, const Body& b1)
     b0.vel += ((dt / 6.0f) * (k1.dVel + 2.0f * k2.dVel + 2.0f * k3.dVel + k4.dVel));
 }
 
-int main(int argc, char** argv)
+int main(int argc, char* argv[])
 {
     GLFWwindow* window = initWindow();
     Shader mainShader("shaders/vshader.glsl", "shaders/fshader.glsl");
-
     UniformHandler uniformer(mainShader);
     uniformer.addWindowSize(window, "windowSize");
-    
-
-    // GLuint windowSizeLoc = glGetUniformLocation(mainShader.ID,"windowSize");
-    // GLuint modelLoc = glGetUniformLocation(mainShader.ID, "model");
-    // GLuint viewLoc = glGetUniformLocation(mainShader.ID, "view");
-    // GLuint projLoc = glGetUniformLocation(mainShader.ID, "proj");
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSetCursorPosCallback(window, mouse_callback);
@@ -751,20 +745,42 @@ int main(int argc, char** argv)
 
     glm::mat4 translationMatrix = glm::mat4(1.0);
 
+    double terminationTime = std::atof(argv[2]);
+    float energy = 0.0;
+    std::ofstream energyRecords;
+    bool record = std::atof(argv[1]) == 1.0;
+    if (record)
+    {
+        energyRecords.open("energyRecords.txt", std::ofstream::out | std::ofstream::trunc);
+        energyRecords << "dt value: " << dt << "\n";
+        // float energy = (0.5 * moon.mass * glm::dot(moon.vel, moon.vel)) + 
+        //     (moon.mass * glm::length(getGravitationalAccel(moon, earth)) * glm::length(moon.vel));
+        // energyRecords << -energy << "\n";
+    }
 
+    float t = 0.0;
     std::cout << "Vertex count: " << earthMesh.vertexCount + moonMesh.vertexCount << std::endl;
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     while (!glfwWindowShouldClose(window))
     {
+        if (record)
+        {
+            if (t > terminationTime)
+                glfwSetWindowShouldClose(window, 1);
+            energy = (0.5 * moon.mass * glm::dot(moon.vel, moon.vel)) + 
+                (moon.mass * -glm::length(getGravitationalAccel(moon, earth)) * glm::length(moon.pos));
+            energyRecords << -energy << "\n";
+        }
         fpsCounter.frames += 1;
         fpsCounter.fpsCheck();
+        
 
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         mainShader.use();
 
-        float t = glfwGetTime();
+        t = glfwGetTime();
         rk4(moon, earth);
 
         // float incl = acos(moon.vel.y / glm::length(glm::vec2(moon.vel.x, moon.vel.y))) * 180.0;
@@ -783,11 +799,6 @@ int main(int argc, char** argv)
         camera.doCameraMovement(window);
         camera.updateView(view);
 
-        // updateUniforms(window, windowSizeLoc);
-        // updateUniformMatrices(
-        //     mainShader, model, view, proj, 
-        //     modelLoc, viewLoc, projLoc
-        // );
         uniformer.updateUniforms();
         uniformer.updateWindowSize(window);
         uniformer.update3DMatrices(view, proj, model);
