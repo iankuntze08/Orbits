@@ -704,6 +704,40 @@ void rk4(Body& b0, const Body& b1)
     b0.vel += ((dt / 6.0f) * (k1.dVel + 2.0f * k2.dVel + 2.0f * k3.dVel + k4.dVel));
 }
 
+struct EnergyRecorder
+{
+    double terminationTime;
+    float energy;
+    std::ofstream energyRecords;
+    bool record;
+
+    EnergyRecorder(double& endTime, const char* filename, char* argv[])
+    {
+        terminationTime = endTime;
+        record = std::atof(argv[1]) == 1.0;
+        if (record)
+        {
+            energyRecords.open(filename, std::ofstream::out | std::ofstream::trunc);
+            energyRecords << "dt value: " << dt << "\n";
+        }
+    }
+
+    void run(GLFWwindow* window, float& curTime, Body& earth, Body& moon)
+    {
+        if (record)
+        {
+            if (curTime > terminationTime)
+                glfwSetWindowShouldClose(window, 1);
+            else
+            {
+                energy = (0.5 * moon.mass * glm::dot(moon.vel, moon.vel)) + 
+                    (moon.mass * -glm::length(getGravitationalAccel(moon, earth)) * glm::length(moon.pos));
+                energyRecords << -energy << "\n";
+            }
+        }
+    }
+};
+
 int main(int argc, char* argv[])
 {
     GLFWwindow* window = initWindow();
@@ -745,29 +779,16 @@ int main(int argc, char* argv[])
 
     glm::mat4 translationMatrix = glm::mat4(1.0);
 
-    double terminationTime = std::atof(argv[2]);
-    float energy = 0.0;
-    std::ofstream energyRecords;
-    bool record = std::atof(argv[1]) == 1.0;
-    if (record)
-    {
-        energyRecords.open("energyRecords.txt", std::ofstream::out | std::ofstream::trunc);
-        energyRecords << "dt value: " << dt << "\n";
-    }
+    double terminationTime = 0.0;
+    EnergyRecorder records((argc == 3) ? terminationTime = std::atof(argv[2]) : terminationTime = 0.0, "EnergyRecords.txt", argv);
 
     float t = 0.0;
     std::cout << "Vertex count: " << earthMesh.vertexCount + moonMesh.vertexCount << std::endl;
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     while (!glfwWindowShouldClose(window))
     {
-        if (record)
-        {
-            if (t > terminationTime)
-                glfwSetWindowShouldClose(window, 1);
-            energy = (0.5 * moon.mass * glm::dot(moon.vel, moon.vel)) + 
-                (moon.mass * -glm::length(getGravitationalAccel(moon, earth)) * glm::length(moon.pos));
-            energyRecords << -energy << "\n";
-        }
+        records.run(window, t, earth, moon);
+
         fpsCounter.frames += 1;
         fpsCounter.fpsCheck();
         
