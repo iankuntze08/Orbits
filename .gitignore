@@ -88,3 +88,4 @@ glad.c
 glfw3.dll
 SimplexNoise.cpp
 SimplexNoise.h
+energyRecords.txt
