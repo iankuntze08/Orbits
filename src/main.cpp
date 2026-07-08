@@ -753,9 +753,6 @@ int main(int argc, char* argv[])
     {
         energyRecords.open("energyRecords.txt", std::ofstream::out | std::ofstream::trunc);
         energyRecords << "dt value: " << dt << "\n";
-        // float energy = (0.5 * moon.mass * glm::dot(moon.vel, moon.vel)) + 
-        //     (moon.mass * glm::length(getGravitationalAccel(moon, earth)) * glm::length(moon.vel));
-        // energyRecords << -energy << "\n";
     }
 
     float t = 0.0;
