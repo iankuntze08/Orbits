@@ -711,7 +711,7 @@ struct EnergyRecorder
     std::ofstream energyRecords;
     bool record;
 
-    EnergyRecorder(double& endTime, const char* filename, char* argv[])
+    EnergyRecorder(double endTime, const char* filename, char* argv[])
     {
         terminationTime = endTime;
         record = std::atof(argv[1]) == 1.0;
@@ -720,6 +720,11 @@ struct EnergyRecorder
             energyRecords.open(filename, std::ofstream::out | std::ofstream::trunc);
             energyRecords << "dt value: " << dt << "\n";
         }
+    }
+
+    EnergyRecorder()
+    {
+        record = false;
     }
 
     void run(GLFWwindow* window, float& curTime, Body& earth, Body& moon)
@@ -779,8 +784,9 @@ int main(int argc, char* argv[])
 
     glm::mat4 translationMatrix = glm::mat4(1.0);
 
-    double terminationTime = 0.0;
-    EnergyRecorder records((argc == 3) ? terminationTime = std::atof(argv[2]) : terminationTime = 0.0, "EnergyRecords.txt", argv);
+    EnergyRecorder records;
+    if (argc == 3 && argv[2] != nullptr)
+        records = EnergyRecorder(std::atof(argv[2]), "EnergyRecords.txt", argv);
 
     float t = 0.0;
     std::cout << "Vertex count: " << earthMesh.vertexCount + moonMesh.vertexCount << std::endl;
@@ -792,7 +798,6 @@ int main(int argc, char* argv[])
         fpsCounter.frames += 1;
         fpsCounter.fpsCheck();
         
-
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
