@@ -41,7 +41,7 @@ float lastX = SCR_WIDTH / 2;
 float lastY = SCR_HEIGHT / 2;
 Camera3D camera = Camera3D(glm::vec3(0.0f, 0.0f, 3.0f), 0.005f);
 
-float dt = 0.5;
+float dt = 0.01;
 
 struct Body
 {
@@ -743,6 +743,57 @@ struct EnergyRecorder
     }
 };
 
+class OrbitTracker
+{
+    public:
+    Body primaryBody;
+    Body secondaryBody;
+    glm::vec3 apoapsis;
+    glm::vec3 periapsis;
+    float eccentricity;
+    float sma;
+    float trueAnomaly;
+    float decimalMultiplier;
+
+    OrbitTracker(Body& primaryBody, Body& secondaryBody, int decimals)
+    {
+        this->primaryBody = primaryBody;
+        this->secondaryBody = secondaryBody;
+
+        apoapsis = primaryBody.pos;
+        periapsis = primaryBody.pos;
+        eccentricity = (glm::length(apoapsis) - glm::length(periapsis)) /
+            (glm::length(apoapsis) + glm::length(periapsis));
+        sma = (glm::length(periapsis) + glm::length(apoapsis)) / 2.0;
+        trueAnomaly = 0.0;
+
+        decimalMultiplier = pow(10, decimals);
+    }
+
+    void track(Body& primaryBody, Body& secondaryBody)
+    {
+        this->primaryBody = primaryBody;
+        this->secondaryBody = secondaryBody;
+        
+        float mag = glm::length(primaryBody.pos);
+        float roundedMagnitude = ((float)((int)(mag * decimalMultiplier))) / decimalMultiplier;
+        if (roundedMagnitude > glm::length(apoapsis))
+        {
+            apoapsis = roundedMagnitude * (primaryBody.pos / mag);
+            std::cout << "new apoapsis at " << glm::length(apoapsis) << " u\n";
+        }
+        if (roundedMagnitude < glm::length(periapsis))
+        {
+            periapsis = roundedMagnitude * (primaryBody.pos / mag);
+            std::cout << "new periapsis at " << glm::length(periapsis) << " u\n"; 
+        }
+
+        eccentricity = (glm::length(apoapsis) - glm::length(periapsis)) /
+            (glm::length(apoapsis) + glm::length(periapsis));
+        sma = (glm::length(periapsis) + glm::length(apoapsis)) / 2.0;
+    }
+};
+
 int main(int argc, char* argv[])
 {
     GLFWwindow* window = initWindow();
@@ -781,6 +832,7 @@ int main(int argc, char* argv[])
 
     Body earth = {glm::vec3(0.0), glm::vec3(0.0), 1.0};
     Body moon = {glm::vec3(8.0, 7.0, 0.0), glm::vec3(0.0, -0.05, 0.16), 0.2};
+    Body randomThing = {glm::vec3(0.0, 0.0, 7.0), glm::vec3(0.377964473, 0.0, 0.0), 0.2};
 
     glm::mat4 translationMatrix = glm::mat4(1.0);
 
@@ -788,12 +840,15 @@ int main(int argc, char* argv[])
     if (argc == 3 && argv[2] != nullptr)
         records = EnergyRecorder(std::atof(argv[2]), "EnergyRecords.txt", argv);
 
+    OrbitTracker moonOrbit(moon, earth, 2);
+
     float t = 0.0;
     std::cout << "Vertex count: " << earthMesh.vertexCount + moonMesh.vertexCount << std::endl;
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     while (!glfwWindowShouldClose(window))
     {
         records.run(window, t, earth, moon);
+        moonOrbit.track(moon, earth);
 
         fpsCounter.frames += 1;
         fpsCounter.fpsCheck();
@@ -805,6 +860,7 @@ int main(int argc, char* argv[])
 
         t = glfwGetTime();
         rk4(moon, earth);
+        rk4(randomThing, earth);
 
         // float incl = acos(moon.vel.y / glm::length(glm::vec2(moon.vel.x, moon.vel.y))) * 180.0;
         // std::cout << "Inclination: " << ((360.0 - incl < 180.0) ? 360.0 - incl : incl) << std::endl;
@@ -815,6 +871,11 @@ int main(int argc, char* argv[])
         glDrawElements(GL_TRIANGLES, earthMesh.indexCount, GL_UNSIGNED_INT, 0);
 
         updateTranslationMatrix(moon.pos, translationLoc);
+        glBindBuffer(GL_ARRAY_BUFFER, moonMesh.VBO);
+        glBindVertexArray(moonMesh.VAO);
+        glDrawElements(GL_TRIANGLES, moonMesh.indexCount, GL_UNSIGNED_INT, 0);
+
+        updateTranslationMatrix(randomThing.pos, translationLoc);
         glBindBuffer(GL_ARRAY_BUFFER, moonMesh.VBO);
         glBindVertexArray(moonMesh.VAO);
         glDrawElements(GL_TRIANGLES, moonMesh.indexCount, GL_UNSIGNED_INT, 0);
