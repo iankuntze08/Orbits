@@ -880,9 +880,9 @@ int main(int argc, char* argv[])
     std::vector<Vertex> moonVert = t1.first;
 
     std::array<Body, 3> bodies = {
-        Body{glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0), 1.0},
-        Body{glm::vec3(8.0, 7.0, 0.0), glm::vec3(0.0, -0.05, 0.16), 0.5},
-        Body{glm::vec3(0.0, 0.0, 7.0), glm::vec3(0.377964473, 0.0, 0.0), 0.5}
+        Body{glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 0.0, 0.0), 1.0},
+        Body{glm::vec3(8.0, 0.0, 0.0), glm::vec3(0.0, 0.3, 0.18), 0.5},
+        Body{glm::vec3(-8.0, 0.0, 0.0), glm::vec3(0.0, 0.3, 0.18), 0.5}
     };
     InstancedMesh2 bodyMesh = bufferInstancedBodies(t1.first, t1.second, bodies);
 

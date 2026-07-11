@@ -14,27 +14,19 @@ def perp(vec: np.ndarray):
 def length(vec: np.ndarray):
     return ((vec[0] ** 2.0) + (vec[1] ** 2.0) + (vec[2] ** 2.0)) ** 0.5
 
-def rotate_by_quat(vec: np.ndarray, quat):
-    vector = np.array([0.0, 0.0, 0.0])
-    num12 = quat[0] + quat[0];
-    num2 = quat[1] + quat[1];
-    num = quat[2] + quat[2];
-    num11 = quat[3] * num12;
-    num10 = quat[3] * num2;
-    num9 = quat[3] * num;
-    num8 = quat[0] * num12;
-    num7 = quat[0] * num2;
-    num6 = quat[0] * num;
-    num5 = quat[1] * num2;
-    num4 = quat[1] * num;
-    num3 = quat[2] * num;
-    num15 = ((vec[0] * ((1 - num5) - num3)) + (vec[1] * (num7 - num9))) + (vec[2] * (num6 + num10));
-    num14 = ((vec[0] * (num7 + num9)) + (vec[1] * ((1 - num8) - num3))) + (vec[2] * (num4 - num11));
-    num13 = ((vec[0] * (num6 - num10)) + (vec[1] * (num4 + num11))) + (vec[2] * ((1 - num8) - num5));
-    vector[0] = num15;
-    vector[1] = num14;
-    vector[2] = num13;
-    return vector
+def to_cpp_code(output: str):
+    output = output.replace(" ", "")
+    output = output.replace("[", "{")
+    output = output.replace("]", "}")
+    output = output.replace(".,", ".0,")
+    output = output.replace(".}", ".0}")
+    output = output.replace("-0.", "0.")
+    output = output.replace(". ", ".0")
+    output = output.replace(",", ", ")
+    # super redundant ... but it gets the job done
+    
+    print(output)
+    return output
 
 
 def sync_orbits(distance: float, num_sats: int):
@@ -43,46 +35,40 @@ def sync_orbits(distance: float, num_sats: int):
     positions = []
     velocities = []
 
-    quat = R.from_quat([0, 0, np.sin(np.pi/4), np.cos(np.pi/4)])
-    mat = quat.as_matrix()
+    r = R.from_quat([0, 0, np.sin(np.pi/4), np.cos(np.pi/4)])
+    plane_normal = np.array([0.0, 1.0, 0.0])
 
     for n in range(num_sats):
         pos = np.array([distance * np.cos(dtheta * n), 0.0, distance * np.sin(dtheta * n)])
         positions.append(pos)
-        vec = perp(pos)
-        uvec = vec / length(vec)
-        vel = rotate_by_quat(uvec, quat.as_quat()) * orbital_vel(1.0, distance)
+        tangent = np.cross(plane_normal, pos)
+        tangent /= np.linalg.norm(tangent)
+        vel = tangent * orbital_vel(1.0, distance) # velocity perpendicular to pos
+        axis = pos / np.linalg.norm(pos) # normalized pos
+        r = R.from_rotvec(axis * 45.0) # rotate along pos vector
+        vel = r.apply(vel) # apply rotation
         velocities.append(vel)
-    return positions, velocities
+    return np.array(positions), np.array(velocities)
 
-def test_positions_velocities(positions: list, velocities: list):
+def test_positions_velocities(positions: np.ndarray, velocities: np.ndarray):
     fig, (ax1, ax2) = plt.subplots(1, 2, subplot_kw={"projection": "3d"})
 
-    positions_x = np.arange(len(positions), dtype=float)
-    positions_y = np.arange(len(positions), dtype=float)
-    positions_z = np.arange(len(positions), dtype=float)
-    for i in range(len(positions)):
-        positions_x[i] = positions[i][0]
-        positions_y[i] = positions[i][1]
-        positions_z[i] = positions[i][2]
-    ax1.scatter(positions_x, positions_z, positions_y)
-    pos2 = (positions_x, positions_z)
+    px = positions[:, 0]
+    py = positions[:, 1]
+    pz = positions[:, 2]
+    ax1.scatter(px, pz, py)
 
-    velocities_x = np.arange(len(velocities), dtype=float)
-    velocities_y = np.arange(len(velocities), dtype=float)
-    velocities_z = np.arange(len(velocities), dtype=float)
-    for i in range(len(velocities)):
-        velocities_x[i] = velocities[i][0]
-        velocities_z[i] = velocities[i][1]
-        velocities_z[i] = velocities[i][2]
-    ax2.quiver(positions_x, positions_z, positions_y, velocities_x, velocities_z, velocities_y, length=0.01)
-    vel2 = (velocities_x, velocities_z)
+    vx = velocities[:, 0]
+    vy = velocities[:, 1]
+    vz = velocities[:, 2]
+    ax2.quiver(px, pz, py, vx, vy, vz, length=0.1, normalize=True)
 
     return fig, (ax1, ax2)
 
 def main():
-    o1, o2 = sync_orbits(1.0, 20)
-    print(f"{o1}\n\n{o2}")
+    o1, o2 = sync_orbits(8.0, 10)
+    # print(f"{o1}\n\n{o2}")
+    to_cpp_code(f"positions:\n{np.array2string(o1, precision=5, separator=", ", suppress_small=True)}\nvelocities:\n{np.array2string(o2, precision=5, separator=", ", suppress_small=True)}")
     fig1, (ax1, ax2) = test_positions_velocities(o1, o2)
     plt.show()
 
