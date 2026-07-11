@@ -848,6 +848,24 @@ InstancedMesh2 bufferInstancedBodies(
     return mesh;
 }
 
+struct RotVec
+{
+    glm::vec3 axis;
+    float angle;
+
+    RotVec(glm::vec3 axis, float angle)
+    {
+        this->axis = axis;
+        this->angle = angle;
+    }
+
+    void apply(glm::vec3& vec)
+    {
+        glm::vec3 p = glm::cross(axis, vec);
+        vec = vec + (sin(angle) * (p)) + ((1.0f - cos(angle)) * glm::cross(axis, p));
+    }
+};
+
 int main(int argc, char* argv[])
 {
     GLFWwindow* window = initWindow();
@@ -879,10 +897,19 @@ int main(int argc, char* argv[])
     std::pair<std::vector<Vertex>, std::vector<unsigned int>> t1 = getSphereVert(0.2, 10, 10, glm::vec3(0.6, 0.6, 0.6));
     std::vector<Vertex> moonVert = t1.first;
 
-    std::array<Body, 3> bodies = {
-        Body{glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 0.0, 0.0), 1.0},
-        Body{glm::vec3(8.0, 0.0, 0.0), glm::vec3(0.0, 0.3, 0.18), 0.5},
-        Body{glm::vec3(-8.0, 0.0, 0.0), glm::vec3(0.0, 0.3, 0.18), 0.5}
+    std::array<Body, 11> bodies = {
+        Body{glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 0.0, 0.0), 1.0}, // main body, no touchy
+
+        Body{glm::vec3(2.0, 0.0, 0.0), glm::vec3(0.0, 0.5, -0.5), 0.5},
+        Body{glm::vec3(1.61803, 0.0, 1.17557), glm::vec3(0.29389, 0.5, -0.40451), 0.5},
+        Body{glm::vec3(0.61803, 0.0, 1.90211), glm::vec3(0.47553, 0.5, -0.15451), 0.5},
+        Body{glm::vec3(-0.61803, 0.0, 1.90211), glm::vec3(0.47553, 0.5, 0.15451), 0.5},
+        Body{glm::vec3(-1.61803, 0.0, 1.17557), glm::vec3(0.29389, 0.5, 0.40451), 0.5},
+        Body{glm::vec3(-2.0, 0.0, -0.0), glm::vec3(0.0, 0.5, 0.5), 0.5},
+        Body{glm::vec3(-1.61803, 0.0, -1.17557), glm::vec3(-0.29389, 0.5, 0.40451), 0.5},
+        Body{glm::vec3(-0.61803, 0.0, -1.90211), glm::vec3(-0.47553, 0.5, 0.15451), 0.5},
+        Body{glm::vec3(0.61803, 0.0, -1.90211), glm::vec3(-0.47553, 0.5, -0.15451), 0.5},
+        Body{glm::vec3(1.61803, 0.0, -1.17557), glm::vec3(-0.29389, 0.5, -0.40451), 0.5}
     };
     InstancedMesh2 bodyMesh = bufferInstancedBodies(t1.first, t1.second, bodies);
 
