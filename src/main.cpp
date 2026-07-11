@@ -12,6 +12,7 @@
 #include <vector>
 #include <algorithm>
 #include <random>
+#include <array>
 
 #include "..\shaders\Shader.h"
 #include "Camera3.h"
@@ -67,6 +68,12 @@ struct Vertex
     glm::vec3 color;
 };
 
+struct PositionScaled
+{
+    glm::vec3 pos;
+    float scale;
+};
+
 struct Mesh
 {
     GLuint VAO;
@@ -74,10 +81,11 @@ struct Mesh
     GLsizei vertexCount;
 };
 
-struct instancedMesh
+struct InstancedMesh2
 {
     GLuint VAO;
     GLuint VBO;
+    GLuint EBO;
     GLuint instanceVBO;
 
     GLsizei vertexCount;
@@ -584,9 +592,9 @@ std::pair<std::vector<Vertex>, std::vector<unsigned int>> getSphereVert(float ra
             float U = ((float) u) / ((float) sides);
             float theta = U * (PI * 2.0);
 
-            float x = (radius * cos(theta) * sin(phi)) - 3;
-            float y = (radius * cos(phi)) - 3;
-            float z = (radius * sin(theta) * sin(phi)) - 3;
+            float x = (radius * cos(theta) * sin(phi));
+            float y = (radius * cos(phi));
+            float z = (radius * sin(theta) * sin(phi));
 
             vertices.push_back({glm::vec3(x, y, z), color});
         }
@@ -780,12 +788,12 @@ class OrbitTracker
         if (roundedMagnitude > glm::length(apoapsis))
         {
             apoapsis = roundedMagnitude * (primaryBody.pos / mag);
-            std::cout << "new apoapsis at " << glm::length(apoapsis) << " u\n";
+            // std::cout << "new apoapsis at " << glm::length(apoapsis) << " u\n";
         }
         if (roundedMagnitude < glm::length(periapsis))
         {
             periapsis = roundedMagnitude * (primaryBody.pos / mag);
-            std::cout << "new periapsis at " << glm::length(periapsis) << " u\n"; 
+            // std::cout << "new periapsis at " << glm::length(periapsis) << " u\n"; 
         }
 
         eccentricity = (glm::length(apoapsis) - glm::length(periapsis)) /
@@ -793,6 +801,52 @@ class OrbitTracker
         sma = (glm::length(periapsis) + glm::length(apoapsis)) / 2.0;
     }
 };
+
+template <size_t N>
+InstancedMesh2 bufferInstancedBodies(
+    std::vector<Vertex>& sphereVert, 
+    std::vector<unsigned int>& sphereIndices, 
+    std::array<Body, N>& bodies
+)
+{
+    std::array<PositionScaled, bodies.size()> translations;
+    
+    for (int i = 0; i < translations.size(); i++)
+        translations[i] = PositionScaled{bodies[i].pos, bodies[i].mass};
+
+    InstancedMesh2 mesh;
+
+    glGenVertexArrays(1, &mesh.VAO);
+    glGenBuffers(1, &mesh.VBO);
+    glGenBuffers(1, &mesh.EBO);
+    glGenBuffers(1, &mesh.instanceVBO);
+
+    glBindVertexArray(mesh.VAO);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+    glBufferData(GL_ARRAY_BUFFER, sphereVert.size() * sizeof(Vertex), sphereVert.data(), GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices.size() * sizeof(unsigned int), sphereIndices.data(), GL_DYNAMIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
+    glEnableVertexAttribArray(0);
+    
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));
+    glEnableVertexAttribArray(1);
+
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.instanceVBO);    
+    glBufferData(GL_ARRAY_BUFFER, translations.size() * sizeof(PositionScaled), translations.data(), GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(PositionScaled), (void*)offsetof(PositionScaled, pos));
+    glEnableVertexAttribArray(2);
+    glVertexAttribDivisor(2, 1);
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(PositionScaled), (void*)offsetof(PositionScaled, scale));
+    glEnableVertexAttribArray(3);
+    glVertexAttribDivisor(3, 1);
+
+    mesh.vertexCount = sphereVert.size();
+
+    return mesh;
+}
 
 int main(int argc, char* argv[])
 {
@@ -822,17 +876,24 @@ int main(int argc, char* argv[])
 
     GLuint translationLoc = glGetUniformLocation(mainShader.ID, "translation");
 
-    std::pair<std::vector<Vertex>, std::vector<unsigned int>> t0 = getSphereVert(1.0, 10, 10, glm::vec3(0.0, 0.0, 0.8));
-    std::vector<Vertex> earthVert = t0.first;
-    Mesh2 earthMesh = bufferTrianglesIndexed(earthVert, t0.second, 0);
+    // std::pair<std::vector<Vertex>, std::vector<unsigned int>> t0 = getSphereVert(1.0, 10, 10, glm::vec3(0.0, 0.0, 0.8));
+    // std::vector<Vertex> earthVert = t0.first;
+    // Mesh2 earthMesh = bufferTrianglesIndexed(earthVert, t0.second, 0);
 
     std::pair<std::vector<Vertex>, std::vector<unsigned int>> t1 = getSphereVert(0.2, 10, 10, glm::vec3(0.6, 0.6, 0.6));
     std::vector<Vertex> moonVert = t1.first;
-    Mesh2 moonMesh = bufferTrianglesIndexed(moonVert, t1.second, 0);
+    // Mesh2 moonMesh = bufferTrianglesIndexed(moonVert, t1.second, 0);
 
-    Body earth = {glm::vec3(0.0), glm::vec3(0.0), 1.0};
-    Body moon = {glm::vec3(8.0, 7.0, 0.0), glm::vec3(0.0, -0.05, 0.16), 0.2};
-    Body randomThing = {glm::vec3(0.0, 0.0, 7.0), glm::vec3(0.377964473, 0.0, 0.0), 0.2};
+    // Body earth = {glm::vec3(0.0), glm::vec3(0.0), 1.0};
+    // Body moon = {glm::vec3(8.0, 7.0, 0.0), glm::vec3(0.0, -0.05, 0.16), 0.2};
+    // Body randomThing = {glm::vec3(0.0, 0.0, 7.0), glm::vec3(0.377964473, 0.0, 0.0), 0.2};
+
+    std::array<Body, 3> bodies = {
+        Body{glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0), 1.0},
+        Body{glm::vec3(8.0, 7.0, 0.0), glm::vec3(0.0, -0.05, 0.16), 0.5},
+        Body{glm::vec3(0.0, 0.0, 7.0), glm::vec3(0.377964473, 0.0, 0.0), 0.5}
+    };
+    InstancedMesh2 bodyMesh = bufferInstancedBodies(t1.first, t1.second, bodies);
 
     glm::mat4 translationMatrix = glm::mat4(1.0);
 
@@ -840,15 +901,15 @@ int main(int argc, char* argv[])
     if (argc == 3 && argv[2] != nullptr)
         records = EnergyRecorder(std::atof(argv[2]), "EnergyRecords.txt", argv);
 
-    OrbitTracker moonOrbit(moon, earth, 2);
+    // OrbitTracker moonOrbit(moon, earth, 2);
 
     float t = 0.0;
-    std::cout << "Vertex count: " << earthMesh.vertexCount + moonMesh.vertexCount << std::endl;
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    // std::cout << "Vertex count: " << earthMesh.vertexCount + moonMesh.vertexCount << std::endl;
+    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     while (!glfwWindowShouldClose(window))
     {
-        records.run(window, t, earth, moon);
-        moonOrbit.track(moon, earth);
+        // records.run(window, t, earth, moon);
+        // moonOrbit.track(moon, earth);
 
         fpsCounter.frames += 1;
         fpsCounter.fpsCheck();
@@ -859,26 +920,32 @@ int main(int argc, char* argv[])
         mainShader.use();
 
         t = glfwGetTime();
-        rk4(moon, earth);
-        rk4(randomThing, earth);
+        // rk4(moon, earth);
+        // rk4(randomThing, earth);
+        for (int i = 0; i < bodies.size(); i++)
+        {
+            if (i > 0) rk4(bodies[i], bodies[0]);
+        }
 
         // float incl = acos(moon.vel.y / glm::length(glm::vec2(moon.vel.x, moon.vel.y))) * 180.0;
         // std::cout << "Inclination: " << ((360.0 - incl < 180.0) ? 360.0 - incl : incl) << std::endl;
 
-        updateTranslationMatrix(earth.pos, translationLoc);
-        glBindBuffer(GL_ARRAY_BUFFER, earthMesh.VBO);
-        glBindVertexArray(earthMesh.VAO);
-        glDrawElements(GL_TRIANGLES, earthMesh.indexCount, GL_UNSIGNED_INT, 0);
+        std::array<PositionScaled, bodies.size()> positions;
+        for (int i = 0; i < positions.size(); i++)
+        {
+            if (i == 0) 
+                positions[i] = PositionScaled{bodies[i].pos, bodies[i].mass * 3.0f};
+            else 
+                positions[i] = PositionScaled{bodies[i].pos, bodies[i].mass};
+        }
 
-        updateTranslationMatrix(moon.pos, translationLoc);
-        glBindBuffer(GL_ARRAY_BUFFER, moonMesh.VBO);
-        glBindVertexArray(moonMesh.VAO);
-        glDrawElements(GL_TRIANGLES, moonMesh.indexCount, GL_UNSIGNED_INT, 0);
-
-        updateTranslationMatrix(randomThing.pos, translationLoc);
-        glBindBuffer(GL_ARRAY_BUFFER, moonMesh.VBO);
-        glBindVertexArray(moonMesh.VAO);
-        glDrawElements(GL_TRIANGLES, moonMesh.indexCount, GL_UNSIGNED_INT, 0);
+        glBindBuffer(GL_ARRAY_BUFFER, bodyMesh.instanceVBO);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, positions.size() * sizeof(PositionScaled), positions.data());
+        glBindVertexArray(bodyMesh.VAO);
+        glDrawElementsInstanced(
+            GL_TRIANGLES, static_cast<GLsizei>(t1.second.size()), 
+            GL_UNSIGNED_INT, nullptr, static_cast<GLsizei>(positions.size())
+        );
 
         camera.doCameraMovement(window);
         camera.updateView(view);
