@@ -876,17 +876,8 @@ int main(int argc, char* argv[])
 
     GLuint translationLoc = glGetUniformLocation(mainShader.ID, "translation");
 
-    // std::pair<std::vector<Vertex>, std::vector<unsigned int>> t0 = getSphereVert(1.0, 10, 10, glm::vec3(0.0, 0.0, 0.8));
-    // std::vector<Vertex> earthVert = t0.first;
-    // Mesh2 earthMesh = bufferTrianglesIndexed(earthVert, t0.second, 0);
-
     std::pair<std::vector<Vertex>, std::vector<unsigned int>> t1 = getSphereVert(0.2, 10, 10, glm::vec3(0.6, 0.6, 0.6));
     std::vector<Vertex> moonVert = t1.first;
-    // Mesh2 moonMesh = bufferTrianglesIndexed(moonVert, t1.second, 0);
-
-    // Body earth = {glm::vec3(0.0), glm::vec3(0.0), 1.0};
-    // Body moon = {glm::vec3(8.0, 7.0, 0.0), glm::vec3(0.0, -0.05, 0.16), 0.2};
-    // Body randomThing = {glm::vec3(0.0, 0.0, 7.0), glm::vec3(0.377964473, 0.0, 0.0), 0.2};
 
     std::array<Body, 3> bodies = {
         Body{glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0), 1.0},
@@ -904,8 +895,6 @@ int main(int argc, char* argv[])
     // OrbitTracker moonOrbit(moon, earth, 2);
 
     float t = 0.0;
-    // std::cout << "Vertex count: " << earthMesh.vertexCount + moonMesh.vertexCount << std::endl;
-    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     while (!glfwWindowShouldClose(window))
     {
         // records.run(window, t, earth, moon);
