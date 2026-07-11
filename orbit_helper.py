@@ -14,28 +14,43 @@ def perp(vec: np.ndarray):
 def length(vec: np.ndarray):
     return ((vec[0] ** 2.0) + (vec[1] ** 2.0) + (vec[2] ** 2.0)) ** 0.5
 
-def to_cpp_code(output: str):
-    output = output.replace(" ", "")
-    output = output.replace("[", "{")
-    output = output.replace("]", "}")
-    output = output.replace(".,", ".0,")
-    output = output.replace(".}", ".0}")
-    output = output.replace("-0.", "0.")
-    output = output.replace(". ", ".0")
-    output = output.replace(",", ", ")
-    # super redundant ... but it gets the job done
+def to_cpp_code(arr_1: np.ndarray, arr_2: np.ndarray):
+    output = f"{np.array2string(arr_1, precision=5, separator=", ", suppress_small=True)}\n{np.array2string(arr_2, precision=5, separator=", ", suppress_small=True)}"
     
-    print(output)
+    output = output.replace(". ", ".0")
+    output = output.replace(" ", "")
+    output = output.replace("[[", "glm::vec3(")
+    output = output.replace("]]", ")\n+")
+    output = output.replace("]", ")")
+    output = output.replace("[", "glm::vec3(")
+    output = output.replace(",\n", "\n")
+    output = output.replace(",", ", ")
+    output = output.replace("-0.0,", "0.0,")
+
+    vel_and_pos = list(filter(bool, output.split("+")))
+    pos_lines = vel_and_pos[0].splitlines()
+    vel_lines = vel_and_pos[1].splitlines()
+    vel_lines.pop(0)
+
+    final = ""
+
+    for i in range(len(pos_lines)):
+        if (i != len(pos_lines) - 1):
+            final += "Body{" + pos_lines[i] + ", " + vel_lines[i] + ", 0.5},\n"
+        else:
+            final += "Body{" + pos_lines[i] + ", " + vel_lines[i] + ", 0.5}\n"
+
+    
+    print(final)
     return output
 
 
-def sync_orbits(distance: float, num_sats: int):
+def sync_orbits(distance: float, num_sats: int, inclination: float):
     dtheta = 6.28318531 / num_sats
 
     positions = []
     velocities = []
 
-    r = R.from_quat([0, 0, np.sin(np.pi/4), np.cos(np.pi/4)])
     plane_normal = np.array([0.0, 1.0, 0.0])
 
     for n in range(num_sats):
@@ -45,7 +60,7 @@ def sync_orbits(distance: float, num_sats: int):
         tangent /= np.linalg.norm(tangent)
         vel = tangent * orbital_vel(1.0, distance) # velocity perpendicular to pos
         axis = pos / np.linalg.norm(pos) # normalized pos
-        r = R.from_rotvec(axis * 45.0) # rotate along pos vector
+        r = R.from_rotvec(axis * inclination, degrees=True) # rotate along pos vector
         vel = r.apply(vel) # apply rotation
         velocities.append(vel)
     return np.array(positions), np.array(velocities)
@@ -66,11 +81,11 @@ def test_positions_velocities(positions: np.ndarray, velocities: np.ndarray):
     return fig, (ax1, ax2)
 
 def main():
-    o1, o2 = sync_orbits(8.0, 10)
+    o1, o2 = sync_orbits(2.0, 10, 45.0)
     # print(f"{o1}\n\n{o2}")
-    to_cpp_code(f"positions:\n{np.array2string(o1, precision=5, separator=", ", suppress_small=True)}\nvelocities:\n{np.array2string(o2, precision=5, separator=", ", suppress_small=True)}")
-    fig1, (ax1, ax2) = test_positions_velocities(o1, o2)
-    plt.show()
+    to_cpp_code(o1, o2)
+    # fig1, (ax1, ax2) = test_positions_velocities(o1, o2)
+    # plt.show()
 
 if __name__ == "__main__":
     main()
