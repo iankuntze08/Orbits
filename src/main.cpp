@@ -17,6 +17,10 @@
 #include "..\shaders\Shader.h"
 #include "Camera3.h"
 #include "..\shaders\ComputeShader.h"
+#include "UniformHandler.h"
+#include "OrbitPopulator.h"
+#include "Body.h"
+
 #include "..\SimplexNoise.h"
 #include "..\SimplexNoise.cpp" // unnecessary?
 
@@ -43,24 +47,7 @@ float lastY = SCR_HEIGHT / 2;
 Camera3D camera = Camera3D(glm::vec3(0.0f, 0.0f, 3.0f), 0.005f);
 
 float dt = 0.01;
-
-struct Body
-{
-    glm::vec3 pos;
-    glm::vec3 vel;
-    float mass;
-
-    void update(Body other)
-    {
-        glm::vec3 dif = other.pos - pos;
-        float dist2 = glm::dot(dif, dif);
-
-        glm::vec3 accel = glm::normalize(dif) * (other.mass / dist2);
-
-        this->vel += accel * dt;
-        this->pos += this->vel * dt;
-    }
-};
+float dt2 = dt * dt;
 
 struct Vertex 
 {
@@ -122,6 +109,11 @@ class FPSHandler
                 std::cout << "FPS: " << fps << "\r" << std::flush;
             }
         }
+        void printTime(float seconds)
+        {
+            if (endTime - startTime > 1.0)
+                std::cout << "Seconds Elasped: " << floor(seconds) << " s\n";
+        }
 };
 
 FPSHandler::FPSHandler()
@@ -131,120 +123,6 @@ FPSHandler::FPSHandler()
     float endTime = 0.0;
     int frames = 0;
 }
-
-class UniformHandler
-{
-    public:
-        struct unfloat
-        {
-            float value;
-            GLint loc;
-        };
-        struct unmat4
-        {
-            glm::mat4 value;
-            GLint loc;
-        };
-        struct unvec2
-        {
-            glm::vec2 value;
-            GLint loc;
-        };
-        struct unwindow
-        {
-            GLFWwindow* window;
-            GLint sizeLoc;
-        };
-
-        std::vector<unfloat> floatList;
-        std::vector<unmat4> mat4List;
-        std::vector<unvec2> vec2List;
-        unwindow window;
-
-        unmat4 viewMatrix;
-        unmat4 projMatrix;
-        unmat4 modelMatrix;
-        unmat4 translationMatrix;
-
-        UniformHandler(const Shader& shaderProgram) : shader(shaderProgram)
-        {
-        }
-
-        void addfloat(const float& x, const char* name)
-        {
-            GLint uniformLoc = glGetUniformLocation(shader.ID, name);
-            if (uniformLoc == -1)
-                throw std::invalid_argument("Invalid uniform name");
-            floatList.push_back(unfloat{x, uniformLoc});
-        }
-        void addmat4(const glm::mat4& x, const char* name)
-        {
-            GLint uniformLoc = glGetUniformLocation(shader.ID, name);
-            if (uniformLoc == -1)
-                throw std::invalid_argument("Invalid uniform name");
-            mat4List.push_back(unmat4{x, uniformLoc});
-        }
-        GLint getUniformLoc(const char* name)
-        {
-            GLint uniformLoc = glGetUniformLocation(shader.ID, name);
-            if (uniformLoc == -1)
-                throw std::invalid_argument("Invalid uniform name");
-            return uniformLoc;
-        }
-        void addvec2(const glm::vec2& x, const char* name)
-        {
-            GLint uniformLoc = glGetUniformLocation(shader.ID, name);
-            if (uniformLoc == -1)
-                throw std::invalid_argument("Invalid uniform name");
-            vec2List.push_back(unvec2{x, uniformLoc});
-        }
-        void addWindowSize(GLFWwindow* window, const char* name)
-        {
-            GLint uniformLoc = glGetUniformLocation(shader.ID, name);
-            if (uniformLoc == -1)
-                throw std::invalid_argument("Invalid uniform name");
-            this->window.sizeLoc = uniformLoc;
-        }
-        void add3DMatrices(glm::mat4& view, glm::mat4& proj, glm::mat4& model)
-        {
-            viewMatrix = {view, getUniformLoc("view")};
-            projMatrix = {proj, getUniformLoc("proj")};
-            modelMatrix = {model, getUniformLoc("model")};
-        }
-
-
-
-        void update3DMatrices(glm::mat4& view, glm::mat4& proj, glm::mat4& model)
-        {
-            viewMatrix.value = view;
-            projMatrix.value = proj;
-            modelMatrix.value = model;
-        }
-        void updateWindowSize(GLFWwindow* window)
-        {
-            int width, height;
-            glfwGetWindowSize(window, &width, &height);
-            // weird behavior if window.sizeLoc is undefined
-            // the location will point to just random memory
-            glUniform2f(this->window.sizeLoc, width, height);
-        }
-        void updateUniforms()
-        {
-            for (unmat4 x : mat4List)
-                glUniformMatrix4fv(x.loc, 1, GL_FALSE, glm::value_ptr(x.value));
-            for (unfloat x : floatList)
-                glUniform1f(x.loc, x.value);
-            for (unvec2 x : vec2List)
-                glUniform2f(x.loc, x.value.x, x.value.y);
-
-            glUniformMatrix4fv(viewMatrix.loc, 1, GL_FALSE, glm::value_ptr(viewMatrix.value));
-            glUniformMatrix4fv(projMatrix.loc, 1, GL_FALSE, glm::value_ptr(projMatrix.value));
-            glUniformMatrix4fv(modelMatrix.loc, 1, GL_FALSE, glm::value_ptr(modelMatrix.value));
-        }
-
-    private:
-        Shader shader;
-};
 
 std::vector<Vertex> getCircleVert(float radius, glm::vec3 pos, glm::vec3 color, float da)
 {
@@ -664,7 +542,7 @@ void updateMatrix(glm::vec3& matrix, GLuint& matrixLoc)
     glUniformMatrix4fv(matrixLoc, 1, GL_FALSE, glm::value_ptr(matrix));
 }
 
-glm::vec3 getGravitationalAccel(const Body& b0, const Body& b1)
+glm::vec3 getGravitationalAccel(const struct Body& b0, const struct Body& b1)
 {
     glm::vec3 dif = b1.pos - b0.pos;
     float dist2 = glm::dot(dif, dif);
@@ -677,7 +555,7 @@ struct Derivative
     glm::vec3 dVel;
 };
 
-Derivative evaluateDerivative(const Body& b0, const Body& b1)
+Derivative evaluateDerivative(const struct Body& b0, const struct Body& b1)
 {
     Derivative d;
     d.dPos = b0.vel;
@@ -685,11 +563,11 @@ Derivative evaluateDerivative(const Body& b0, const Body& b1)
     return d;
 }
 
-void rk4(Body& b0, const Body& b1)
+void rk4(struct Body& b0, const struct Body& b1)
 {
     Derivative k1 = evaluateDerivative(b0, b1);
 
-    Body b = b0;
+    struct Body b = b0;
     b.pos += k1.dPos * (dt * 0.5f);
     b.vel += k1.dVel * (dt * 0.5f);
 
@@ -735,7 +613,7 @@ struct EnergyRecorder
         record = false;
     }
 
-    void run(GLFWwindow* window, float& curTime, Body& earth, Body& moon)
+    void run(GLFWwindow* window, float& curTime, struct Body& earth, struct Body& moon)
     {
         if (record)
         {
@@ -754,8 +632,8 @@ struct EnergyRecorder
 class OrbitTracker
 {
     public:
-    Body primaryBody;
-    Body secondaryBody;
+    struct Body primaryBody;
+    struct Body secondaryBody;
     glm::vec3 apoapsis;
     glm::vec3 periapsis;
     float eccentricity;
@@ -763,7 +641,7 @@ class OrbitTracker
     float trueAnomaly;
     float decimalMultiplier;
 
-    OrbitTracker(Body& primaryBody, Body& secondaryBody, int decimals)
+    OrbitTracker(struct Body& primaryBody, struct Body& secondaryBody, int decimals)
     {
         this->primaryBody = primaryBody;
         this->secondaryBody = secondaryBody;
@@ -778,7 +656,7 @@ class OrbitTracker
         decimalMultiplier = pow(10, decimals);
     }
 
-    void track(Body& primaryBody, Body& secondaryBody)
+    void track(Body& primaryBody,struct Body& secondaryBody)
     {
         this->primaryBody = primaryBody;
         this->secondaryBody = secondaryBody;
@@ -802,14 +680,13 @@ class OrbitTracker
     }
 };
 
-template <size_t N>
 InstancedMesh2 bufferInstancedBodies(
     std::vector<Vertex>& sphereVert, 
     std::vector<unsigned int>& sphereIndices, 
-    std::array<Body, N>& bodies
+    std::vector<Body>& bodies
 )
 {
-    std::array<PositionScaled, bodies.size()> translations;
+    std::vector<PositionScaled> translations(bodies.size());
     
     for (int i = 0; i < translations.size(); i++)
         translations[i] = PositionScaled{bodies[i].pos, bodies[i].mass};
@@ -848,23 +725,38 @@ InstancedMesh2 bufferInstancedBodies(
     return mesh;
 }
 
-struct RotVec
+void leapfrog(struct Body& b0, const struct Body& b1)
 {
-    glm::vec3 axis;
-    float angle;
+    glm::vec3 initialAccel = getGravitationalAccel(b0, b1);
+    // need to have seperate function calls because position changes
+    b0.pos = b0.pos + (b0.vel * dt) + (0.5f * initialAccel * (dt2));
+    b0.vel = b0.vel + (0.5f * (initialAccel + getGravitationalAccel(b0, b1)) * dt);
+}
 
-    RotVec(glm::vec3 axis, float angle)
-    {
-        this->axis = axis;
-        this->angle = angle;
-    }
+GLuint makeSSBO(std::vector<Body>& bodies, ComputeShader& shader)
+{
+    glUseProgram(shader.computeProgram);
 
-    void apply(glm::vec3& vec)
-    {
-        glm::vec3 p = glm::cross(axis, vec);
-        vec = vec + (sin(angle) * (p)) + ((1.0f - cos(angle)) * glm::cross(axis, p));
-    }
-};
+    GLuint SSBO;
+    glGenBuffers(1, &SSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, bodies.size() * sizeof(Body), bodies.data(), GL_DYNAMIC_DRAW); // static size for now
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, SSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+    return SSBO;
+}
+
+GLuint setupBodies(std::vector<Body>& bodies, ComputeShader& shader)
+{
+    glUseProgram(shader.computeProgram);
+    GLuint bodiesLoc = glGetUniformLocation(shader.computeProgram, "count");
+    glUniform1ui(bodiesLoc, bodies.size());
+
+    GLuint s = makeSSBO(bodies, shader);
+    shader.SSBOList.push_back(s);
+    return bodiesLoc;
+}
 
 int main(int argc, char* argv[])
 {
@@ -897,37 +789,51 @@ int main(int argc, char* argv[])
     std::pair<std::vector<Vertex>, std::vector<unsigned int>> t1 = getSphereVert(0.2, 10, 10, glm::vec3(0.6, 0.6, 0.6));
     std::vector<Vertex> moonVert = t1.first;
 
-    std::array<Body, 11> bodies = {
-        Body{glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 0.0, 0.0), 1.0}, // main body, no touchy
+    // std::array<Body, 12> bodies = {
+    //     Body{glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 0.0, 0.0), 1.0}, // main body, no touchy
+    //     Body{glm::vec3(8.0, 0.0, 0.0), glm::vec3(0.0, 0.0, 0.35355), 0.3},
 
-        Body{glm::vec3(2.0, 0.0, 0.0), glm::vec3(0.0, 0.5, -0.5), 0.5},
-        Body{glm::vec3(1.61803, 0.0, 1.17557), glm::vec3(0.29389, 0.5, -0.40451), 0.5},
-        Body{glm::vec3(0.61803, 0.0, 1.90211), glm::vec3(0.47553, 0.5, -0.15451), 0.5},
-        Body{glm::vec3(-0.61803, 0.0, 1.90211), glm::vec3(0.47553, 0.5, 0.15451), 0.5},
-        Body{glm::vec3(-1.61803, 0.0, 1.17557), glm::vec3(0.29389, 0.5, 0.40451), 0.5},
-        Body{glm::vec3(-2.0, 0.0, -0.0), glm::vec3(0.0, 0.5, 0.5), 0.5},
-        Body{glm::vec3(-1.61803, 0.0, -1.17557), glm::vec3(-0.29389, 0.5, 0.40451), 0.5},
-        Body{glm::vec3(-0.61803, 0.0, -1.90211), glm::vec3(-0.47553, 0.5, 0.15451), 0.5},
-        Body{glm::vec3(0.61803, 0.0, -1.90211), glm::vec3(-0.47553, 0.5, -0.15451), 0.5},
-        Body{glm::vec3(1.61803, 0.0, -1.17557), glm::vec3(-0.29389, 0.5, -0.40451), 0.5}
-    };
+    //     Body{glm::vec3(2.0, 0.0, 0.0), glm::vec3(0.0, 0.5, -0.5), 0.1},
+    //     Body{glm::vec3(1.61803, 0.0, 1.17557), glm::vec3(0.29389, 0.5, -0.40451), 0.1},
+    //     Body{glm::vec3(0.61803, 0.0, 1.90211), glm::vec3(0.47553, 0.5, -0.15451), 0.1},
+    //     Body{glm::vec3(-0.61803, 0.0, 1.90211), glm::vec3(0.47553, 0.5, 0.15451), 0.1},
+    //     Body{glm::vec3(-1.61803, 0.0, 1.17557), glm::vec3(0.29389, 0.5, 0.40451), 0.1},
+    //     Body{glm::vec3(-2.0, 0.0, 0.0), glm::vec3(0.0, 0.5, 0.5), 0.1},
+    //     Body{glm::vec3(-1.61803, 0.0, -1.17557), glm::vec3(-0.29389, 0.5, 0.40451), 0.1},
+    //     Body{glm::vec3(-0.61803, 0.0, -1.90211), glm::vec3(-0.47553, 0.5, 0.15451), 0.1},
+    //     Body{glm::vec3(0.61803, 0.0, -1.90211), glm::vec3(-0.47553, 0.5, -0.15451), 0.1},
+    //     Body{glm::vec3(1.61803, 0.0, -1.17557), glm::vec3(-0.29389, 0.5, -0.40451), 0.1}
+    // };
+
+    OrbitPopulator pop = OrbitPopulator(10, 5.0, 0.0);
+    pop.insertBody(0, BODY_H::Body{glm::vec3(0.0), glm::vec3(0.0), 1.0});
+    pop.generate();
+    std::vector<Body> bodies = pop.bodies;
+
+
     InstancedMesh2 bodyMesh = bufferInstancedBodies(t1.first, t1.second, bodies);
 
-    glm::mat4 translationMatrix = glm::mat4(1.0);
+
+    ComputeShader compShader(
+        "shaders/BodyShader.glsl", 
+        glm::ivec3(32, 1, 1), 
+        glm::uvec3(bodies.size(), 1, 1)
+    );
+    GLuint bodiesLoc = setupBodies(bodies, compShader);
+
+    
 
     EnergyRecorder records;
     if (argc == 3 && argv[2] != nullptr)
         records = EnergyRecorder(std::atof(argv[2]), "EnergyRecords.txt", argv);
 
-    // OrbitTracker moonOrbit(moon, earth, 2);
-
     float t = 0.0;
     while (!glfwWindowShouldClose(window))
     {
-        // records.run(window, t, earth, moon);
-        // moonOrbit.track(moon, earth);
+        // records.run(window, t, bodies[0], bodies[4]);
 
         fpsCounter.frames += 1;
+        // fpsCounter.printTime(t);
         fpsCounter.fpsCheck();
         
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -936,17 +842,16 @@ int main(int argc, char* argv[])
         mainShader.use();
 
         t = glfwGetTime();
-        // rk4(moon, earth);
-        // rk4(randomThing, earth);
-        for (int i = 0; i < bodies.size(); i++)
-        {
-            if (i > 0) rk4(bodies[i], bodies[0]);
-        }
+        // for (int i = 0; i < bodies.size(); i++)
+        // {
+            // if (i > 0) rk4(bodies[i], bodies[0]);
+            // if (i > 1) rk4(bodies[i], bodies[1]);
+        // }
 
         // float incl = acos(moon.vel.y / glm::length(glm::vec2(moon.vel.x, moon.vel.y))) * 180.0;
         // std::cout << "Inclination: " << ((360.0 - incl < 180.0) ? 360.0 - incl : incl) << std::endl;
 
-        std::array<PositionScaled, bodies.size()> positions;
+        std::vector<PositionScaled> positions(bodies.size());
         for (int i = 0; i < positions.size(); i++)
         {
             if (i == 0) 
@@ -963,12 +868,15 @@ int main(int argc, char* argv[])
             GL_UNSIGNED_INT, nullptr, static_cast<GLsizei>(positions.size())
         );
 
+        compShader.use();
+
         camera.doCameraMovement(window);
         camera.updateView(view);
 
         uniformer.updateUniforms();
         uniformer.updateWindowSize(window);
         uniformer.update3DMatrices(view, proj, model);
+        glUniform1ui(bodiesLoc, bodies.size());
 
         glfwSwapBuffers(window);
         glfwPollEvents();

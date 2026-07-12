@@ -1,3 +1,6 @@
+#ifndef CAMERA_3D
+#define CAMERA_3D
+
 #include <KHR\khrplatform.h>
 #include <glad/glad.h>
 #include <glm.hpp>
@@ -75,3 +78,5 @@ class Camera3D
             cameraFront = vec;
         }
 };
+
+#endif

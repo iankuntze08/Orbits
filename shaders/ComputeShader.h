@@ -1,3 +1,6 @@
+#ifndef COMPUTESHADER_H
+#define COMPUTESHADER_H
+
 #include <glad/glad.h>
 
 #include <string>
@@ -107,3 +110,5 @@ private:
         }
     }
 };
+
+#endif
