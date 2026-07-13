@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
+import argparse
 
 def vis_viva(mass: float, distance: float, sma: float):
     return (mass * ((2.0 / distance) - (1.0 / sma))) ** 0.5
@@ -82,7 +83,20 @@ def test_positions_velocities(positions: np.ndarray, velocities: np.ndarray):
 
 def main():
     # o1, o2 = sync_orbits(2.0, 10, 45.0)
-    print(orbital_vel(1.0, 8.0))
+    parser = argparse.ArgumentParser("Get orbital position and velocity")
+    parser.add_argument("distance", help="Distance from center", type=float)
+    parser.add_argument("inclination", help="Orbital inclination", type=float)
+    args = parser.parse_args()
+
+    distance = args.distance
+    inclination = args.inclination
+
+    args = parser.parse_args()
+    vel = np.array([0.0, 0.0, orbital_vel(1.0, distance)])
+    r = R.from_rotvec(np.array([1.0, 0.0, 0.0]) * inclination, degrees=True)
+    # 28.58 deg
+    print(f"Velocity:\n{r.apply(vel)}")
+    print(f"Position:\n{np.array([distance, 0.0, 0.0])}")
     # print(f"{o1}\n\n{o2}")
     # to_cpp_code(o1, o2)
     # fig1, (ax1, ax2) = test_positions_velocities(o1, o2)
