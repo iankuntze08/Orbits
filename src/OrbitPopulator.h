@@ -40,7 +40,7 @@ class OrbitPopulator
     {
         this->distance = distanceFromCenter;
         // bodies.reserve(numSatellites);
-        this->inclination = inclination;
+        this->inclination = glm::radians(inclination);
         this->numSats = numSatellites;
     }
 
@@ -49,26 +49,30 @@ class OrbitPopulator
         bodies.emplace(bodies.begin() + index, body);
     }
 
-    void generate()
+    void generate(int rings, float ringSpacing)
     {
-        float dtheta = M_TAU / numSats;
 
         glm::vec3 normalPlane = glm::vec3(0.0, 1.0, 0.0);
         RotVec r = RotVec(glm::vec3(1.0, 0.0, 0.0), inclination);
 
-        for (int i = 0; i < numSats; i++)
+        for (int i = 0; i < rings; i++)
         {
-            bodies.emplace_back(Body4{glm::vec4(0.0), glm::vec4(0.0), 0.1});
-            Body4& body = bodies.back();
-            float angle = dtheta * i;
+            float dtheta = rings * M_TAU / numSats;
+            for (int q = 0; q < numSats / rings; q++)
+            {
+                bodies.emplace_back(Body4{glm::vec4(0.0), glm::vec4(0.0), 0.1});
+                Body4& body = bodies.back();
+                float angle = dtheta * q;
 
-            glm::vec3 v3pos = glm::vec3(distance * cos(angle), 0.0, distance * sin(angle));
+                glm::vec3 v3pos = glm::vec3(distance * cos(angle), 0.0, distance * sin(angle));
 
-            glm::vec3 tangent = glm::normalize(glm::cross(normalPlane, v3pos));
-            glm::vec3 v3vel = tangent * orbitalVelocity(distance, bodies[0].mass);
+                glm::vec3 tangent = glm::normalize(glm::cross(normalPlane, v3pos));
+                glm::vec3 v3vel = tangent * orbitalVelocity(distance, bodies[0].mass);
 
-            body.vel = glm::vec4(r.apply(v3vel), 0.0);
-            body.pos = glm::vec4(r.apply(v3pos), 0.0);
+                body.vel = glm::vec4(r.apply(v3vel), 0.0);
+                body.pos = glm::vec4(r.apply(v3pos), 0.0);
+            }
+            distance -= ringSpacing;
         }
     }
 

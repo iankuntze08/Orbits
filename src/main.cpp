@@ -780,6 +780,11 @@ void helpBodyShader(ComputeShader& shader, std::vector<Body4>& bodies, GLuint& b
     std::swap(shader.SSBOList[0], shader.SSBOList[1]);
 }
 
+Body b42B0(Body4 b)
+{
+    return Body{glm::vec3(b.pos.x, b.pos.y, b.pos.z), glm::vec3(b.vel.x, b.vel.y, b.vel.z), b.mass};
+}
+
 int main(int argc, char* argv[])
 {
     GLFWwindow* window = initWindow();
@@ -811,9 +816,10 @@ int main(int argc, char* argv[])
     std::pair<std::vector<Vertex>, std::vector<unsigned int>> t1 = getSphereVert(0.2, 10, 10, glm::vec3(0.6, 0.6, 0.6));
     std::vector<Vertex> moonVert = t1.first;
 
-    OrbitPopulator pop = OrbitPopulator(50, 5.0, 0.0);
+    OrbitPopulator pop = OrbitPopulator(400, 2.0, 0.0);
     pop.insertBody(0, Body4{glm::vec4(0.0), glm::vec4(0.0), 1.0});
-    pop.generate();
+    pop.insertBody(1, Body4{glm::vec4(3.0, 0.0, 0.0, 0.0), glm::vec4(0.0, 0.0, -0.57735027, 0.0), 0.4});
+    pop.generate(10, 0.05);
     std::vector<Body4> bodies = pop.getBodies();
     // std::cout << bodies.size() << std::endl;
 
@@ -837,10 +843,11 @@ int main(int argc, char* argv[])
     float t = 0.0;
     while (!glfwWindowShouldClose(window))
     {
-        // records.run(window, t, bodies[0], bodies[4]);
+        records.run(window, t, b42B0(bodies[0]), b42B0(bodies[1]));
 
         fpsCounter.frames += 1;
-        // fpsCounter.printTime(t);
+        if (argc == 3)
+            fpsCounter.printTime(t);
         fpsCounter.fpsCheck();
         
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
