@@ -74,6 +74,7 @@ public:
     void use()
     {
         glUseProgram(computeProgram);
+        // reminder to make sure struct alignment with GLSL is exact
 
         for (int i = 0; i < SSBOList.size(); i++)
         {

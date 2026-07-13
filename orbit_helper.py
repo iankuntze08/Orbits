@@ -81,9 +81,10 @@ def test_positions_velocities(positions: np.ndarray, velocities: np.ndarray):
     return fig, (ax1, ax2)
 
 def main():
-    o1, o2 = sync_orbits(2.0, 10, 45.0)
+    # o1, o2 = sync_orbits(2.0, 10, 45.0)
+    print(orbital_vel(1.0, 8.0))
     # print(f"{o1}\n\n{o2}")
-    to_cpp_code(o1, o2)
+    # to_cpp_code(o1, o2)
     # fig1, (ax1, ax2) = test_positions_velocities(o1, o2)
     # plt.show()
 

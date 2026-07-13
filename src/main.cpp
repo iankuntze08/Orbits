@@ -23,10 +23,7 @@
 
 #include "..\SimplexNoise.h"
 #include "..\SimplexNoise.cpp" // unnecessary?
-
-#define TAU 6.28318531
-#define PI 3.141592654
-#define E 2.7182818285
+#include "Constants.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
@@ -133,7 +130,7 @@ std::vector<Vertex> getCircleVert(float radius, glm::vec3 pos, glm::vec3 color, 
         color
     });
 
-    for (float i = 0.0; i < TAU; i += da)
+    for (float i = 0.0; i < M_TAU; i += da)
     {
         float x = radius * cos(i);
         float y = radius * sin(i);
@@ -142,7 +139,7 @@ std::vector<Vertex> getCircleVert(float radius, glm::vec3 pos, glm::vec3 color, 
             {glm::vec3(x + pos.x, y + pos.y, 0.0f), color}
         );
 
-        if (i + da > TAU)
+        if (i + da > M_TAU)
         {
             vertices.push_back(
                 {glm::vec3(radius + pos.x, 0.0f, 0.0f), color}
@@ -463,12 +460,12 @@ std::pair<std::vector<Vertex>, std::vector<unsigned int>> getSphereVert(float ra
     for (int i = 0; i <= strips; i++)
     {
         float V = ((float) i) / ((float) strips);
-        float phi = V * PI;
+        float phi = V * M_PI;
 
         for (int u = 0; u <= sides; u++)
         {
             float U = ((float) u) / ((float) sides);
-            float theta = U * (PI * 2.0);
+            float theta = U * (M_PI * 2.0);
 
             float x = (radius * cos(theta) * sin(phi));
             float y = (radius * cos(phi));
@@ -683,13 +680,13 @@ class OrbitTracker
 InstancedMesh2 bufferInstancedBodies(
     std::vector<Vertex>& sphereVert, 
     std::vector<unsigned int>& sphereIndices, 
-    std::vector<Body>& bodies
+    std::vector<Body4>& bodies
 )
 {
     std::vector<PositionScaled> translations(bodies.size());
     
     for (int i = 0; i < translations.size(); i++)
-        translations[i] = PositionScaled{bodies[i].pos, bodies[i].mass};
+        translations[i] = PositionScaled{glm::vec3(bodies[i].pos.x, bodies[i].pos.y, bodies[i].pos.z), bodies[i].mass};
 
     InstancedMesh2 mesh;
 
@@ -733,29 +730,54 @@ void leapfrog(struct Body& b0, const struct Body& b1)
     b0.vel = b0.vel + (0.5f * (initialAccel + getGravitationalAccel(b0, b1)) * dt);
 }
 
-GLuint makeSSBO(std::vector<Body>& bodies, ComputeShader& shader)
+std::pair<GLuint, GLuint> makeSSBOs(const std::vector<Body4>& bodies, const ComputeShader& shader)
 {
     glUseProgram(shader.computeProgram);
 
-    GLuint SSBO;
-    glGenBuffers(1, &SSBO);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, bodies.size() * sizeof(Body), bodies.data(), GL_DYNAMIC_DRAW); // static size for now
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, SSBO);
+    GLuint SSBOcurrent;
+    glGenBuffers(1, &SSBOcurrent);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBOcurrent);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, bodies.size() * sizeof(Body4), bodies.data(), GL_DYNAMIC_DRAW); // static size for now
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, SSBOcurrent);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-    return SSBO;
+    GLuint SSBOnext;
+    glGenBuffers(1, &SSBOnext);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, SSBOnext);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, bodies.size() * sizeof(Body4), bodies.data(), GL_DYNAMIC_DRAW); // static size for now
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, SSBOnext);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+    return std::pair(SSBOcurrent, SSBOnext);
 }
 
-GLuint setupBodies(std::vector<Body>& bodies, ComputeShader& shader)
+GLuint setupBodies(const std::vector<Body4>& bodies, ComputeShader& shader)
 {
     glUseProgram(shader.computeProgram);
-    GLuint bodiesLoc = glGetUniformLocation(shader.computeProgram, "count");
-    glUniform1ui(bodiesLoc, bodies.size());
+    GLint countLoc = glGetUniformLocation(shader.computeProgram, "count");
+    if (countLoc == -1)
+        throw std::invalid_argument("Invalid uniform name");
+    glUniform1ui(countLoc, bodies.size());
 
-    GLuint s = makeSSBO(bodies, shader);
-    shader.SSBOList.push_back(s);
-    return bodiesLoc;
+    std::pair<GLuint, GLuint> s = makeSSBOs(bodies, shader);
+    shader.SSBOList.push_back(s.first);
+    shader.SSBOList.push_back(s.second);
+    return countLoc;
+}
+
+void helpBodyShader(ComputeShader& shader, std::vector<Body4>& bodies, GLuint& bodiesLoc)
+{
+    // in the shader, local_size_x = 32
+    // glFinish();
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, shader.SSBOList[1]); // next bodies
+    glGetBufferSubData(
+        GL_SHADER_STORAGE_BUFFER,
+        0,
+        bodies.size() * sizeof(Body4),
+        bodies.data()
+    );
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, shader.SSBOList[0]); // current bodies
+    std::swap(shader.SSBOList[0], shader.SSBOList[1]);
 }
 
 int main(int argc, char* argv[])
@@ -789,26 +811,11 @@ int main(int argc, char* argv[])
     std::pair<std::vector<Vertex>, std::vector<unsigned int>> t1 = getSphereVert(0.2, 10, 10, glm::vec3(0.6, 0.6, 0.6));
     std::vector<Vertex> moonVert = t1.first;
 
-    // std::array<Body, 12> bodies = {
-    //     Body{glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 0.0, 0.0), 1.0}, // main body, no touchy
-    //     Body{glm::vec3(8.0, 0.0, 0.0), glm::vec3(0.0, 0.0, 0.35355), 0.3},
-
-    //     Body{glm::vec3(2.0, 0.0, 0.0), glm::vec3(0.0, 0.5, -0.5), 0.1},
-    //     Body{glm::vec3(1.61803, 0.0, 1.17557), glm::vec3(0.29389, 0.5, -0.40451), 0.1},
-    //     Body{glm::vec3(0.61803, 0.0, 1.90211), glm::vec3(0.47553, 0.5, -0.15451), 0.1},
-    //     Body{glm::vec3(-0.61803, 0.0, 1.90211), glm::vec3(0.47553, 0.5, 0.15451), 0.1},
-    //     Body{glm::vec3(-1.61803, 0.0, 1.17557), glm::vec3(0.29389, 0.5, 0.40451), 0.1},
-    //     Body{glm::vec3(-2.0, 0.0, 0.0), glm::vec3(0.0, 0.5, 0.5), 0.1},
-    //     Body{glm::vec3(-1.61803, 0.0, -1.17557), glm::vec3(-0.29389, 0.5, 0.40451), 0.1},
-    //     Body{glm::vec3(-0.61803, 0.0, -1.90211), glm::vec3(-0.47553, 0.5, 0.15451), 0.1},
-    //     Body{glm::vec3(0.61803, 0.0, -1.90211), glm::vec3(-0.47553, 0.5, -0.15451), 0.1},
-    //     Body{glm::vec3(1.61803, 0.0, -1.17557), glm::vec3(-0.29389, 0.5, -0.40451), 0.1}
-    // };
-
-    OrbitPopulator pop = OrbitPopulator(10, 5.0, 0.0);
-    pop.insertBody(0, BODY_H::Body{glm::vec3(0.0), glm::vec3(0.0), 1.0});
+    OrbitPopulator pop = OrbitPopulator(50, 5.0, 0.0);
+    pop.insertBody(0, Body4{glm::vec4(0.0), glm::vec4(0.0), 1.0});
     pop.generate();
-    std::vector<Body> bodies = pop.bodies;
+    std::vector<Body4> bodies = pop.getBodies();
+    // std::cout << bodies.size() << std::endl;
 
 
     InstancedMesh2 bodyMesh = bufferInstancedBodies(t1.first, t1.second, bodies);
@@ -842,22 +849,15 @@ int main(int argc, char* argv[])
         mainShader.use();
 
         t = glfwGetTime();
-        // for (int i = 0; i < bodies.size(); i++)
-        // {
-            // if (i > 0) rk4(bodies[i], bodies[0]);
-            // if (i > 1) rk4(bodies[i], bodies[1]);
-        // }
-
-        // float incl = acos(moon.vel.y / glm::length(glm::vec2(moon.vel.x, moon.vel.y))) * 180.0;
-        // std::cout << "Inclination: " << ((360.0 - incl < 180.0) ? 360.0 - incl : incl) << std::endl;
 
         std::vector<PositionScaled> positions(bodies.size());
         for (int i = 0; i < positions.size(); i++)
         {
+            glm::vec3 pos = glm::vec3(bodies[i].pos.x, bodies[i].pos.y, bodies[i].pos.z);
             if (i == 0) 
-                positions[i] = PositionScaled{bodies[i].pos, bodies[i].mass * 3.0f};
+                positions[i] = PositionScaled{pos, bodies[i].mass * 3.0f};
             else 
-                positions[i] = PositionScaled{bodies[i].pos, bodies[i].mass};
+                positions[i] = PositionScaled{pos, bodies[i].mass};
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, bodyMesh.instanceVBO);
@@ -868,15 +868,16 @@ int main(int argc, char* argv[])
             GL_UNSIGNED_INT, nullptr, static_cast<GLsizei>(positions.size())
         );
 
-        compShader.use();
-
         camera.doCameraMovement(window);
         camera.updateView(view);
 
         uniformer.updateUniforms();
         uniformer.updateWindowSize(window);
         uniformer.update3DMatrices(view, proj, model);
+
+        compShader.use();
         glUniform1ui(bodiesLoc, bodies.size());
+        helpBodyShader(compShader, bodies, bodiesLoc);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
