@@ -14,6 +14,7 @@
 #include "RotationVector.h"
 #include "Body.h"
 #include "Constants.h"
+#include "RandomNumberGen.h"
 
 class OrbitPopulator
 {
@@ -74,6 +75,46 @@ class OrbitPopulator
             }
             distance -= ringSpacing;
         }
+    }
+
+    void insertBodiesAtLoc(float dist, float incl, float angle, int count)
+    {
+        angle = glm::radians(angle);
+        incl = glm::radians(incl);
+        glm::vec3 normalPlane = glm::vec3(0.0, 1.0, 0.0);
+        RotVec r = RotVec(glm::vec3(0.0, 0.0, 1.0), incl);
+
+        for (int i = 0; i < count; i++)
+        {
+            glm::vec3 pos = glm::vec3(dist * cos(angle + (i / 100.0)), 0.0, dist * sin(angle));
+            glm::vec3 vel = -glm::normalize(glm::cross(normalPlane, pos)) * (orbitalVelocity(dist, bodies[0].mass));
+
+            vel = r.apply(vel);
+            // pos = r.apply(pos);
+            bodies.push_back(Body4{glm::vec4(pos, 0.0), glm::vec4(vel, 0.0), 0.1});
+        }
+    }
+
+    void insertBodiesAtLocRandom(glm::vec3 pos, glm::vec3 vel, int count)
+    {
+        RandomNumberGenerator rng = RandomNumberGenerator();
+
+        for (int i = 0; i < count; i++)
+            bodies.push_back(Body4{
+                glm::vec4(pos.x + rng.Generate(-0.01, 0.01), pos.y + rng.Generate(-0.01, 0.01), pos.z + rng.Generate(-0.01, 0.01), 0.0), 
+                glm::vec4(vel.x + rng.Generate(-0.01, 0.01), vel.y + rng.Generate(-0.01, 0.01), vel.z + rng.Generate(-0.01, 0.01), 0.0), 
+                0.1}
+            );
+    }
+    void insertBodiesAtLocRandom(glm::vec3 pos, int count)
+    {
+        RandomNumberGenerator rng = RandomNumberGenerator();
+
+        for (int i = 0; i < count; i++)
+            bodies.push_back(Body4{
+                glm::vec4(pos.x + rng.Generate(-0.01, 0.01), pos.y + rng.Generate(-0.01, 0.01), pos.z + rng.Generate(-0.01, 0.01), 0.0), 
+                glm::vec4(rng.Generate(-0.01, 0.01), rng.Generate(-0.01, 0.01), orbitalVelocity(glm::length(pos), bodies[0].mass), 0.0),
+                0.1});
     }
 
     std::vector<Body4> getBodies()

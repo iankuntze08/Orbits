@@ -86,17 +86,19 @@ def main():
     parser = argparse.ArgumentParser("Get orbital position and velocity")
     parser.add_argument("distance", help="Distance from center", type=float)
     parser.add_argument("inclination", help="Orbital inclination", type=float)
+    parser.add_argument("mass", help="Central mass", type=float)
     args = parser.parse_args()
 
     distance = args.distance
     inclination = args.inclination
+    mass = args.mass
 
     args = parser.parse_args()
-    vel = np.array([0.0, 0.0, orbital_vel(1.0, distance)])
+    vel = np.array([0.0, 0.0, orbital_vel(mass, distance)])
     r = R.from_rotvec(np.array([1.0, 0.0, 0.0]) * inclination, degrees=True)
     # 28.58 deg
-    print(f"Velocity:\n{r.apply(vel)}")
-    print(f"Position:\n{np.array([distance, 0.0, 0.0])}")
+    print(f"Velocity:\n{r.apply(vel)}".replace("  0.", ", 0."))
+    print(f"Position:\n{np.array([distance, 0.0, 0.0])}".replace("  0.", ", 0."))
     # print(f"{o1}\n\n{o2}")
     # to_cpp_code(o1, o2)
     # fig1, (ax1, ax2) = test_positions_velocities(o1, o2)

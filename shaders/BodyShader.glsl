@@ -68,7 +68,7 @@ Derivative3 evaluateDerivative(State curState, uint index)
     return d;
 }
 
-Body3 rk4(State curState, uint index)
+State rk4(State curState, uint index)
 {
     Derivative3 k1 = evaluateDerivative(curState, index);
 
@@ -104,7 +104,7 @@ Body3 rk4(State curState, uint index)
     curState.bCurrent.pos += ((dt / 6.0) * (k1.dPos + 2.0 * k2.dPos + 2.0 * k3.dPos + k4.dPos));
     curState.bCurrent.vel += ((dt / 6.0) * (k1.dVel + 2.0 * k2.dVel + 2.0 * k3.dVel + k4.dVel));
 
-    return curState.bCurrent;
+    return curState;
 }
 
 layout(local_size_x = 32) in;
@@ -143,7 +143,7 @@ void main()
     
     State curState = State(mainBody, secondaryBody, currentBody);
 
-    currentBody = rk4(curState, idx);
+    curState = rk4(curState, idx);
 
-    bodiesNext[idx] = Body4(vec4(currentBody.pos, 0.0), vec4(currentBody.vel, 0.0), currentBody.mass);
+    bodiesNext[idx] = Body4(vec4(curState.bCurrent.pos, 0.0), vec4(curState.bCurrent.vel, 0.0), curState.bCurrent.mass);
 }

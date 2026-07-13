@@ -204,20 +204,6 @@ void updateUniformMatrices(Shader& ourShader,
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(proj));
 }
 
-// https://gamedev.stackexchange.com/questions/179426/c-generate-random-float-values-between-a-range
-class RandomNumberGenerator
-{
-    std::random_device m_randomDevice{};
-    std::mt19937 m_engine{m_randomDevice()};
-
-    public:
-        // Generates a random float in the range [low, high)
-        float Generate(float low, float high)
-        {
-            return std::uniform_real_distribution<float>{low, high}(m_engine);
-        }
-};
-
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
     if (firstMouse)
@@ -816,10 +802,11 @@ int main(int argc, char* argv[])
     std::pair<std::vector<Vertex>, std::vector<unsigned int>> t1 = getSphereVert(0.2, 10, 10, glm::vec3(0.6, 0.6, 0.6));
     std::vector<Vertex> moonVert = t1.first;
 
-    OrbitPopulator pop = OrbitPopulator(400, 2.0, 0.0);
+    OrbitPopulator pop = OrbitPopulator(100, 12.0, 0.0);
     pop.insertBody(0, Body4{glm::vec4(0.0), glm::vec4(0.0), 1.0});
-    pop.insertBody(1, Body4{glm::vec4(3.0, 0.0, 0.0, 0.0), glm::vec4(0.0, 0.0, -0.57735027, 0.0), 0.4});
-    pop.generate(10, 0.05);
+    pop.insertBody(1, Body4{glm::vec4(10.0, 0.0, 0.0, 0.0), glm::vec4(0.0, -0.05491238, 0.31142356, 0.0), 0.6});
+    // pop.insertBodiesAtLocRandom(glm::vec3(-20.0, 0.0, 0.0), 10);
+    pop.generate(10, 0.1);
     std::vector<Body4> bodies = pop.getBodies();
     // std::cout << bodies.size() << std::endl;
 
@@ -843,7 +830,7 @@ int main(int argc, char* argv[])
     float t = 0.0;
     while (!glfwWindowShouldClose(window))
     {
-        records.run(window, t, b42B0(bodies[0]), b42B0(bodies[1]));
+        records.run(window, t, b42B0(bodies[0]), b42B0(bodies[4]));
 
         fpsCounter.frames += 1;
         if (argc == 3)
