@@ -4,7 +4,28 @@ from scipy.spatial.transform import Rotation as R
 import argparse
 
 def vis_viva(mass: float, distance: float, sma: float):
+    """returns velocity"""
     return (mass * ((2.0 / distance) - (1.0 / sma))) ** 0.5
+
+def grav_accel(pos, mass: float):
+    dist2 = np.dot(pos, pos)
+    inv_dist3 = (1.0 / np.sqrt(dist2)) ** 3
+    return -pos * (mass * inv_dist3)
+
+def dv_required(height0: float, height1: float, central_mass: float):
+    p0 = np.array([height0, 0.0, 0.0])
+    p1 = np.array([height1, 0.0, 0.0])
+
+    v0 = orbital_vel(central_mass, height0)
+    v1 = orbital_vel(central_mass, height1)
+
+    dv = np.sqrt(central_mass / height0) * (np.sqrt((2.0 * height1) / (height0 + height1)) - 1.0)
+    target_angular_vel = np.sqrt(central_mass / (height1 ** 3.0))
+    t_to_transfer = np.pi * np.sqrt(((height0 + height1) ** 3.0) / (8.0 * central_mass))
+    angular_alignment = np.pi - (target_angular_vel * t_to_transfer)
+    print(angular_alignment)
+
+    return dv
 
 def orbital_vel(mass: float, distance: float) -> float:
     return (mass / distance) ** 0.5
@@ -82,7 +103,7 @@ def test_positions_velocities(positions: np.ndarray, velocities: np.ndarray):
     return fig, (ax1, ax2)
 
 def main():
-    # o1, o2 = sync_orbits(2.0, 10, 45.0)
+    o1, o2 = sync_orbits(2.0, 10, 45.0)
     parser = argparse.ArgumentParser("Get orbital position and velocity")
     parser.add_argument("distance", help="Distance from center", type=float)
     parser.add_argument("inclination", help="Orbital inclination", type=float)
@@ -103,6 +124,9 @@ def main():
     # to_cpp_code(o1, o2)
     # fig1, (ax1, ax2) = test_positions_velocities(o1, o2)
     # plt.show()
+
+    # print(dv_required(5.0, 20.0, 1.0))
+    # print(f"1: {5.0 * np.cos(-1.5893)}, 2: {5.0 * np.sin(-1.5893)}")
 
 if __name__ == "__main__":
     main()
