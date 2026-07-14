@@ -7,6 +7,8 @@ struct Body3
     vec3 vel;
     float mass;
 };
+// const float dt = 0.01;
+uniform float dt;
 
 struct Body4
 {
@@ -28,7 +30,7 @@ struct State
     Body3 bCurrent;
 };
 
-const float dt = 0.01;
+// const float dt = 0.001;
 
 vec3 getGravitationalAccel(const State curState)
 {
@@ -126,7 +128,7 @@ layout(std430, binding = 1) writeonly buffer nextPart
 // in uvec3 gl_GlobalInvocationID;
 // in uint  gl_LocalInvocationIndex;
 
-uniform uint count;  
+uniform uint count;
 
 void main()
 {
