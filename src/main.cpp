@@ -20,10 +20,12 @@
 #include "UniformHandler.h"
 #include "OrbitPopulator.h"
 #include "Body.h"
+#include "Polynomial.h"
+#include "Constants.h"
+#include "OrbitTracker.h"
 
 #include "..\SimplexNoise.h"
 #include "..\SimplexNoise.cpp" // unnecessary?
-#include "Constants.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
@@ -41,9 +43,9 @@ float pitch = 0.0;
 bool firstMouse = true;
 float lastX = SCR_WIDTH / 2;
 float lastY = SCR_HEIGHT / 2;
-Camera3D camera = Camera3D(glm::vec3(0.0f, 0.0f, 3.0f), 0.005f);
+Camera3D camera = Camera3D(glm::vec3(0.0f, 0.0f, 2.0f), 0.005f);
 
-float dt = 0.01;
+float dt = 0.001;
 float dt2 = dt * dt;
 
 struct Vertex 
@@ -612,57 +614,6 @@ struct EnergyRecorder
     }
 };
 
-class OrbitTracker
-{
-    public:
-    struct Body primaryBody;
-    struct Body secondaryBody;
-    glm::vec3 apoapsis;
-    glm::vec3 periapsis;
-    float eccentricity;
-    float sma;
-    float trueAnomaly;
-    float decimalMultiplier;
-
-    OrbitTracker(struct Body& primaryBody, struct Body& secondaryBody, int decimals)
-    {
-        this->primaryBody = primaryBody;
-        this->secondaryBody = secondaryBody;
-
-        apoapsis = primaryBody.pos;
-        periapsis = primaryBody.pos;
-        eccentricity = (glm::length(apoapsis) - glm::length(periapsis)) /
-            (glm::length(apoapsis) + glm::length(periapsis));
-        sma = (glm::length(periapsis) + glm::length(apoapsis)) / 2.0;
-        trueAnomaly = 0.0;
-
-        decimalMultiplier = pow(10, decimals);
-    }
-
-    void track(Body& primaryBody,struct Body& secondaryBody)
-    {
-        this->primaryBody = primaryBody;
-        this->secondaryBody = secondaryBody;
-        
-        float mag = glm::length(primaryBody.pos);
-        float roundedMagnitude = ((float)((int)(mag * decimalMultiplier))) / decimalMultiplier;
-        if (roundedMagnitude > glm::length(apoapsis))
-        {
-            apoapsis = roundedMagnitude * (primaryBody.pos / mag);
-            // std::cout << "new apoapsis at " << glm::length(apoapsis) << " u\n";
-        }
-        if (roundedMagnitude < glm::length(periapsis))
-        {
-            periapsis = roundedMagnitude * (primaryBody.pos / mag);
-            // std::cout << "new periapsis at " << glm::length(periapsis) << " u\n"; 
-        }
-
-        eccentricity = (glm::length(apoapsis) - glm::length(periapsis)) /
-            (glm::length(apoapsis) + glm::length(periapsis));
-        sma = (glm::length(periapsis) + glm::length(apoapsis)) / 2.0;
-    }
-};
-
 InstancedMesh2 bufferInstancedBodies(
     std::vector<Vertex>& sphereVert, 
     std::vector<unsigned int>& sphereIndices, 
@@ -766,9 +717,24 @@ void helpBodyShader(ComputeShader& shader, std::vector<Body4>& bodies, GLuint& b
     std::swap(shader.SSBOList[0], shader.SSBOList[1]);
 }
 
-Body b42B0(Body4 b)
+float orbitalVelocity(float distance, float mass)
 {
-    return Body{glm::vec3(b.pos.x, b.pos.y, b.pos.z), glm::vec3(b.vel.x, b.vel.y, b.vel.z), b.mass};
+    return sqrt(mass / distance);
+}
+
+float getAngularAlignment(float centralMass, float targetHeight, float baseHeight)
+{
+    float tAngularVel = sqrt(centralMass / pow(targetHeight, 3.0));
+    float timeToTransfer = M_PI * sqrt((pow(baseHeight + targetHeight, 3.0) / (8.0 * centralMass)));
+    return M_PI - (tAngularVel * timeToTransfer);
+}
+
+/**
+ * Gets the change in velocity required to move from a height to another
+ */
+float getDeltaVelocity(float centralMass, float targetHeight, float baseHeight)
+{
+    return sqrt(centralMass / baseHeight) * (sqrt((2.0 * targetHeight) / (baseHeight + targetHeight)) - 1.0);
 }
 
 int main(int argc, char* argv[])
@@ -776,7 +742,9 @@ int main(int argc, char* argv[])
     GLFWwindow* window = initWindow();
     Shader mainShader("shaders/vshader.glsl", "shaders/fshader.glsl");
     UniformHandler uniformer(mainShader);
+    
     uniformer.addWindowSize(window, "windowSize");
+    
 
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSetCursorPosCallback(window, mouse_callback);
@@ -786,10 +754,10 @@ int main(int argc, char* argv[])
     glm::mat4 model = glm::mat4(1.0f);
     glm::mat4 view = glm::mat4(1.0f);
     glm::mat4 proj = glm::mat4(1.0f);
-    model = glm::rotate(model, glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     proj = glm::perspective(glm::radians(70.0f), 800.0f / 600.0f, 0.1f, 100.0f);
     view = glm::translate(view, glm::vec3(0.0f, 0.0f, 0.0f));
 
+    
     uniformer.add3DMatrices(view, proj, model);
 
     glm::vec2 windowSize = glm::vec2(SCR_WIDTH, SCR_HEIGHT);
@@ -802,13 +770,41 @@ int main(int argc, char* argv[])
     std::pair<std::vector<Vertex>, std::vector<unsigned int>> t1 = getSphereVert(0.2, 10, 10, glm::vec3(0.6, 0.6, 0.6));
     std::vector<Vertex> moonVert = t1.first;
 
-    OrbitPopulator pop = OrbitPopulator(100, 12.0, 0.0);
+    OrbitPopulator pop = OrbitPopulator(300, 5.0, 0.0);
     pop.insertBody(0, Body4{glm::vec4(0.0), glm::vec4(0.0), 1.0});
-    pop.insertBody(1, Body4{glm::vec4(10.0, 0.0, 0.0, 0.0), glm::vec4(0.0, -0.05491238, 0.31142356, 0.0), 0.6});
+    pop.insertBody(1, Body4{glm::vec4(10.0, 0.0, 0.0, 0.0), glm::vec4(0.0, 0.0, 0.31622777, 0.0), 0.1});
+    pop.generate(80, 0.05);
     // pop.insertBodiesAtLocRandom(glm::vec3(-20.0, 0.0, 0.0), 10);
-    pop.generate(10, 0.1);
     std::vector<Body4> bodies = pop.getBodies();
-    // std::cout << bodies.size() << std::endl;
+
+    float startHeight = 3.0;
+    float ecc = calcEccentricity(20.0, 5.0);
+    float dv = getDeltaVelocity(bodies[0].mass, glm::length(bodies[1].pos), startHeight);
+    float angularAlignment = getAngularAlignment(bodies[0].mass, glm::length(bodies[1].pos), startHeight);
+    bodies.emplace(bodies.begin() + 2, Body4{
+        glm::vec4(startHeight * cos(-angularAlignment), 0.0, startHeight * sin(-angularAlignment), 0.0),
+        glm::vec4(orbitalVelocity(startHeight, 1.0) + dv, 0.0, 0.0, 0.0), 
+        0.1
+    });
+    // OrbitalParameter probe = OrbitalParameter{
+    //     bodies[2].pos, bodies[2].vel, 
+    //     glm::vec3(-20.0, 0.0, 0.0), glm::vec3(5.0, 0.0, 0.0),
+    //     ecc, ta, 0.5f * (apoapsis - periapsis)
+    // };
+
+    // double u = bodies[1].mass / (bodies[0].mass - bodies[1].mass);
+    // Polynomial p = Polynomial(std::vector<double>{
+    //     1.0, 
+    //     u - 3.0, 
+    //     3.0 - (2.0 * u),
+    //     -u,
+    //     2 * u,
+    //     -u
+    // }, 0.00001);
+    // float x = p.findRoot(10.0);
+    // glm::vec3 bpos = glm::vec3(bodies[1].pos.x, bodies[1].pos.y, bodies[1].pos.z);
+    // glm::vec3 l1pos = glm::normalize(bpos) * (glm::length(bpos) - (glm::length(bpos) * x));
+    // std::cout << l1pos.x << "\n";
 
 
     InstancedMesh2 bodyMesh = bufferInstancedBodies(t1.first, t1.second, bodies);
@@ -820,8 +816,14 @@ int main(int argc, char* argv[])
         glm::uvec3(bodies.size(), 1, 1)
     );
     GLuint bodiesLoc = setupBodies(bodies, compShader);
+    GLuint dtLoc = glGetUniformLocation(compShader.computeProgram, "dt");
 
-    
+
+
+    OrbitTracker obTracker = OrbitTracker(bodies[2], bodies[0], 3);
+    Body4& focusedBody = bodies[2];
+
+
 
     EnergyRecorder records;
     if (argc == 3 && argv[2] != nullptr)
@@ -830,7 +832,9 @@ int main(int argc, char* argv[])
     float t = 0.0;
     while (!glfwWindowShouldClose(window))
     {
-        records.run(window, t, b42B0(bodies[0]), b42B0(bodies[4]));
+        // int height, width;
+        // glfwGetWindowSize(window, &height, &width);
+        obTracker.track(bodies[2], bodies[0]);
 
         fpsCounter.frames += 1;
         if (argc == 3)
@@ -848,7 +852,7 @@ int main(int argc, char* argv[])
         for (int i = 0; i < positions.size(); i++)
         {
             glm::vec3 pos = glm::vec3(bodies[i].pos.x, bodies[i].pos.y, bodies[i].pos.z);
-            if (i == 0) 
+            if (i < 2) 
                 positions[i] = PositionScaled{pos, bodies[i].mass * 3.0f};
             else 
                 positions[i] = PositionScaled{pos, bodies[i].mass};
@@ -868,9 +872,12 @@ int main(int argc, char* argv[])
         uniformer.updateUniforms();
         uniformer.updateWindowSize(window);
         uniformer.update3DMatrices(view, proj, model);
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(-focusedBody.pos.x, -focusedBody.pos.y, -focusedBody.pos.z));
 
         compShader.use();
         glUniform1ui(bodiesLoc, bodies.size());
+        glUniform1f(dtLoc, dt);
         helpBodyShader(compShader, bodies, bodiesLoc);
 
         glfwSwapBuffers(window);
