@@ -23,13 +23,17 @@
 #include "Polynomial.h"
 #include "Constants.h"
 #include "OrbitTracker.h"
+#include "FocusBody.h"
 
 #include "..\SimplexNoise.h"
 #include "..\SimplexNoise.cpp" // unnecessary?
 
+
+glm::mat4 pMat = glm::mat4(1.0f);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     glViewport(0, 0, width, height);
+    pMat = glm::perspective(glm::radians(70.0f), static_cast<float>(width) / static_cast<float>(height), 0.1f, 100.0f);
 }
 void processInput(GLFWwindow* window);
 
@@ -45,7 +49,7 @@ float lastX = SCR_WIDTH / 2;
 float lastY = SCR_HEIGHT / 2;
 Camera3D camera = Camera3D(glm::vec3(0.0f, 0.0f, 2.0f), 0.005f);
 
-float dt = 0.005;
+float dt = 0.0005;
 float dt2 = dt * dt;
 
 struct Vertex 
@@ -585,7 +589,7 @@ struct EnergyRecorder
     EnergyRecorder(double endTime, const char* filename, char* argv[])
     {
         terminationTime = endTime;
-        record = std::atof(argv[1]) == 1.0;
+        record = std::atof(argv[1]) == 1;
         if (record)
         {
             energyRecords.open(filename, std::ofstream::out | std::ofstream::trunc);
@@ -726,7 +730,8 @@ float getAngularAlignment(float centralMass, float targetHeight, float baseHeigh
 {
     float tAngularVel = sqrt(centralMass / pow(targetHeight, 3.0));
     float timeToTransfer = M_PI * sqrt((pow(baseHeight + targetHeight, 3.0) / (8.0 * centralMass)));
-    return M_PI - (tAngularVel * timeToTransfer);
+    // return M_PI - (tAngularVel * timeToTransfer);
+    return M_PI * (1.0 - ((1.0 / (2.0 * M_SQRT2)) * sqrt(pow((baseHeight / targetHeight) + 1.0, 3.0))));
 }
 
 /**
@@ -775,12 +780,12 @@ int main(int argc, char* argv[])
 
     GLuint translationLoc = glGetUniformLocation(mainShader.ID, "translation");
 
-    std::pair<std::vector<Vertex>, std::vector<unsigned int>> t1 = getSphereVert(0.2, 10, 10, glm::vec3(0.6, 0.6, 0.6));
+    std::pair<std::vector<Vertex>, std::vector<unsigned int>> t1 = getSphereVert(0.2, 20, 20, glm::vec3(0.6, 0.6, 0.6));
     std::vector<Vertex> moonVert = t1.first;
 
     OrbitPopulator pop = OrbitPopulator(600, 5.0, 0.0);
     pop.insertBody(0, Body4{glm::vec4(0.0), glm::vec4(0.0), 1.0});
-    pop.insertBody(1, Body4{glm::vec4(10.0, 0.0, 0.0, 0.0), glm::vec4(0.0, 0.0, 0.31622777, 0.0), 0.1});
+    pop.insertBody(1, Body4{glm::vec4(20.0, 0.0, 0.0, 0.0), glm::vec4(0.0, 0.0, 0.2236068, 0.0), 0.1});
     pop.generate(80, 0.05);
     // pop.insertBodiesAtLocRandom(glm::vec3(-20.0, 0.0, 0.0), 10);
     std::vector<Body4> bodies = pop.getBodies();
@@ -819,7 +824,7 @@ int main(int argc, char* argv[])
 
 
     ComputeShader compShader(
-        "shaders/BodyShader.glsl", 
+        "shaders/BodyShader.glsl",
         glm::ivec3(32, 1, 1), 
         glm::uvec3(bodies.size(), 1, 1)
     );
@@ -829,7 +834,8 @@ int main(int argc, char* argv[])
 
 
     OrbitTracker obTracker = OrbitTracker(bodies[2], bodies[0], 3);
-    Body4& focusedBody = bodies[2];
+    // Body4& focusedBody = bodies[0];
+    FocusBody bodyFocuser = FocusBody(window, bodies, 3);
 
 
 
@@ -837,6 +843,7 @@ int main(int argc, char* argv[])
     if (argc == 3 && argv[2] != nullptr)
         records = EnergyRecorder(std::atof(argv[2]), "EnergyRecords.txt", argv);
 
+    glfwSetWindowSize(window, 1000, 1000);
     float t = 0.0;
     while (!glfwWindowShouldClose(window))
     {
@@ -844,6 +851,7 @@ int main(int argc, char* argv[])
         // glfwGetWindowSize(window, &height, &width);
         obTracker.track(bodies[2], bodies[0]);
         changeDeltaTime(window);
+        bodyFocuser.swap(t, model, bodies);
 
         fpsCounter.frames += 1;
         if (argc == 3)
@@ -878,11 +886,10 @@ int main(int argc, char* argv[])
         camera.doCameraMovement(window);
         camera.updateView(view);
 
+        proj = pMat; // makes the aspect ratio better trust
         uniformer.updateUniforms();
         uniformer.updateWindowSize(window);
         uniformer.update3DMatrices(view, proj, model);
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(-focusedBody.pos.x, -focusedBody.pos.y, -focusedBody.pos.z));
 
         compShader.use();
         glUniform1ui(bodiesLoc, bodies.size());
